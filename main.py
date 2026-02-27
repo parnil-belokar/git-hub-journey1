@@ -40,7 +40,10 @@ def get_db():
     finally:
         db.close()
 
-Base.metadata.create_all(bind=engine)
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception as e:
+    print(f"Database connection error on startup: {e}")
 
 def sanitize_url(url: str) -> str:
     if not url or url.startswith("http"):
@@ -67,11 +70,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Ensure uploads directory exists
-if not os.path.exists("uploads"):
-    os.makedirs("uploads")
+# Ensure uploads directory exists (use /tmp on Vercel, but local uploads here if it works)
+UPLOAD_DIR = os.getenv("UPLOAD_DIR", "uploads" if not os.getenv("VERCEL") else "/tmp/uploads")
 
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+try:
+    if not os.path.exists(UPLOAD_DIR):
+        os.makedirs(UPLOAD_DIR)
+except Exception as e:
+    print(f"Warning: Could not create upload directory {UPLOAD_DIR}: {e}")
+    # On strict Vercel environments, we fallback to exactly /tmp
+    UPLOAD_DIR = "/tmp"
+
+try:
+    app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+except RuntimeError as e:
+    print(f"Warning: Could not mount static files: {e}")
 
 
 
@@ -190,14 +203,14 @@ async def upload_file(file: UploadFile = File(...)):
     unique_filename = f"{timestamp}_{uuid.uuid4().hex}{file_extension}"
     
     # Save locally
-    if not os.path.exists("uploads"):
-        os.makedirs("uploads")
+    if not os.path.exists(UPLOAD_DIR):
+        os.makedirs(UPLOAD_DIR, exist_ok=True)
         
-    file_path = os.path.join("uploads", unique_filename)
+    file_path = os.path.join(UPLOAD_DIR, unique_filename)
     with open(file_path, "wb") as f:
         f.write(file_bytes)
 
-    print(f"[UPLOAD] ✅ Asset saved locally: uploads/{unique_filename}")
+    print(f"[UPLOAD] ✅ Asset saved locally: {file_path}")
     
     # Try to upload to Supabase in the background (SILENTLY) if config exists
     if SUPABASE_URL and SUPABASE_SERVICE_KEY:
@@ -221,10 +234,10 @@ async def upload_file(file: UploadFile = File(...)):
 async def analyze_image_endpoint(file: UploadFile = File(...)):
     # 1. Save temp file for analysis
     temp_filename = f"temp_{uuid.uuid4().hex}_{file.filename}"
-    temp_path = os.path.join("uploads", temp_filename)
+    temp_path = os.path.join(UPLOAD_DIR, temp_filename)
     
-    if not os.path.exists("uploads"):
-        os.makedirs("uploads")
+    if not os.path.exists(UPLOAD_DIR):
+        os.makedirs(UPLOAD_DIR, exist_ok=True)
         
     content = await file.read()
     with open(temp_path, "wb") as f:
@@ -353,7 +366,7 @@ def create_complaint(complaint: schemas.ComplaintCreate, db: Session = Depends(g
         if complaint.image_url.startswith("http"):
             try:
                 import httpx
-                temp_img_path = f"temp_{uuid.uuid4().hex}.jpg"
+                temp_img_path = os.path.join(UPLOAD_DIR, f"temp_{uuid.uuid4().hex}.jpg")
                 with httpx.Client() as client:
                     resp = client.get(complaint.image_url)
                     with open(temp_img_path, "wb") as f:
@@ -372,7 +385,7 @@ def create_complaint(complaint: schemas.ComplaintCreate, db: Session = Depends(g
                     os.remove(temp_img_path)
         else:
             img_name = complaint.image_url.split("/")[-1]
-            img_path = os.path.join("uploads", img_name)
+            img_path = os.path.join(UPLOAD_DIR, img_name)
             if os.path.exists(img_path):
                 try:
                     analysis = json.loads(analyzer.analyze_image(img_path))
