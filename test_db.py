@@ -3,9 +3,9 @@ from sqlalchemy.orm import sessionmaker
 import urllib.parse
 import os
 
-project_id = "vzvyjryvryggevkuumhm"
-password = urllib.parse.quote_plus("Sushant@2026")
-db_host = "aws-1-ap-northeast-2.pooler.supabase.com"
+project_id = ""
+password = 
+db_host = 
 
 SQLALCHEMY_DATABASE_URL = f"postgresql://postgres.{project_id}:{password}@{db_host}:6543/postgres"
 
