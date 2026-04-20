@@ -1,10 +1,10 @@
 import urllib.parse
 from sqlalchemy import create_engine, text
 
-project_id = "vzvyjryvryggevkuumhm"
-password = urllib.parse.quote_plus("Sushant@2026")
-db_host = "aws-1-ap-northeast-2.pooler.supabase.com"
-SQLALCHEMY_DATABASE_URL = f"postgresql://postgres.{project_id}:{password}@{db_host}:6543/postgres"
+project_id = ""
+password = 
+db_host = ""
+SQLALCHEMY_DATABASE_URL = f""
 
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
 
